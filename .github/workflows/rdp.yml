@@ -14,30 +14,29 @@ jobs:
     - name: Download and Install Playit
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 100  # Give some time for the download to complete
+        Start-Sleep -Seconds 5  # Optional, can be skipped if you know the download completes immediately
 
-        
-    # Default, optional.
-    - name: Enable TS
-      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
-    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+    # Enable RDP and User Authentication
+    - name: Enable RDP and User Authentication
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
     - name: Start Playit and Set Up RDP Tunnel
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
+        # Start Playit with the provided secret key in the background
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -PassThru
+        Start-Sleep -Seconds 5 # Ensure Playit has time to initialize before continuing
+
+        # Start Playit again in the background to keep the tunnel open
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
 
-        
-    # Prevent workflow to stop
+    # Keep the GitHub Action Runner Alive
     - name: Keep the GitHub Action Runner Alive
       run: |
-          Start-Sleep -Seconds 2147483000000  # Adjust the duration based on your needs
-
-
-
-
-        
+        # Keep the runner alive indefinitely by running a continuous loop
+        while ($true) { Start-Sleep -Seconds 3600 }
