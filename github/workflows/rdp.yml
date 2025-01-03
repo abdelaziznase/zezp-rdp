@@ -11,36 +11,37 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    - name: Set execution policy to allow scripts
-      run: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
-
     - name: Download and Install Playit
       run: |
+        # تحميل وتشغيل Playit
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5  # Give some time for the download to complete
+        Start-Sleep -Seconds 5  # منح الوقت لإتمام التحميل
 
-    - name: Verify Playit installation
+    - name: Enable RDP
       run: |
-        if (-Not (Test-Path "$env:USERPROFILE\playit.exe")) {
-          Write-Error "Playit installation failed"
-        }
-
-    - name: Enable TS
-      run: |
+        # تفعيل خدمة RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+
+        # إعداد المستخدم المحلي (تخزين كلمة السر بشكل آمن)
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText ${{ secrets.ADMIN_PASSWORD }} -Force)
 
     - name: Start Playit and Set Up RDP Tunnel
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}  # مفتاح التوثيق من secrets
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+        # بدء Playit باستخدام مفتاح التوثيق وتأكد من نجاح العملية
+        $exitCode = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -PassThru -Wait | Select-Object -ExpandProperty ExitCode
+        if ($exitCode -ne 0) {
+          Write-Error "فشل إعداد Playit مع رمز الخروج $exitCode"
+          exit $exitCode
+        }
+        
+        # بدء Playit في نافذة جديدة
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
 
-    - name: Keep the GitHub Action Runner Alive (Indefinitely)
+    - name: Keep the GitHub Action Runner Alive
       run: |
-        while ($true) {
-          Start-Sleep -Seconds 60  # Sleep for a minute, but the loop will continue indefinitely
-        }
+        # إبقاء العملية حية لمنع انتهاء الوقت
+        Start-Sleep -Seconds 11800  # تعديل المدة حسب الحاجة
