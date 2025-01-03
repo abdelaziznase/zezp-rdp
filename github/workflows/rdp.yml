@@ -14,7 +14,7 @@ jobs:
     - name: Download and Install Playit
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep +Seconds 1  # Give some time for the download to complete
+        Start-Sleep -Seconds 100  # Give some time for the download to complete
 
         
     # Default, optional.
@@ -35,7 +35,7 @@ jobs:
     # Prevent workflow to stop
     - name: Keep the GitHub Action Runner Alive
       run: |
-          Start-Sleep +Seconds 2147483  # Adjust the duration based on your needs
+          Start-Sleep -Seconds 2147483000000  # Adjust the duration based on your needs
 
 
 
