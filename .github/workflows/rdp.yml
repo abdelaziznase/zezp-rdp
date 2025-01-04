@@ -13,39 +13,29 @@ jobs:
 
     - name: Download and Install Playit
       run: |
-        $playitUrl = "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe"
-        $playitPath = "$env:USERPROFILE\playit.exe"
-        Invoke-WebRequest -Uri $playitUrl -OutFile $playitPath
-        if (!(Test-Path $playitPath)) {
-          Write-Error "Playit download failed"
-          exit 1
-        }
-        Write-Host "Playit downloaded successfully."
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5  # Give some time for the download to complete
 
-    # Enable RDP
+    # Enable RDP (Remote Desktop Protocol)
     - name: Enable TS
-      run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
     - name: Start Playit and Set Up RDP Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
-        # Start Playit in the background without waiting for the process to complete
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+        # Start Playit process with the authentication key
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
+        # Ensure Playit runs continuously in the background by restarting Playit after it ends
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow -ArgumentList "--secret $env:PLAYIT_AUTH_KEY"
 
-        # Optionally, start another instance of Playit in case it's required to maintain the tunnel
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
-
-    # Prevent workflow from stopping by keeping a process alive
-    - name: Keep the GitHub Action Runner Alive
+    # Keep Playit and RDP alive
+    - name: Keep Playit and RDP alive
       run: |
-        # Sleep in intervals to keep the GitHub runner alive indefinitely while Playit works
-        while ($true) {
-          Write-Host "Keeping Playit RDP Tunnel alive..."
-          Start-Sleep -Seconds 600  # Sleep for 10 minutes and check again
-        }
+          # Keep Playit alive for an extended period of time
+          while ($true) {
+            Start-Sleep -Seconds 3600  # Sleep for 1 hour
+          }
