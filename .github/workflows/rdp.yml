@@ -17,11 +17,12 @@ jobs:
         Start-Sleep -Seconds 5  # Give some time for the download to complete
 
     # Enable RDP (Remote Desktop Protocol)
-    - name: Enable TS
-      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+    - name: Enable RDP and Firewall Rules
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
     - name: Start Playit and Set Up RDP Tunnel
       env:
@@ -29,24 +30,36 @@ jobs:
       run: |
         # Start Playit with the authentication key
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-        # Ensure Playit runs continuously in the background
+        # Ensure Playit runs continuously in the background (start second instance for backup)
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
 
-    - name: Monitor Playit and Reconnect Tunnel if Closed
+    - name: Monitor Playit Tunnel and Reconnect If Necessary
       run: |
-        # Monitor Playit process and restart if it's closed
+        # Ensure Playit is always running and the tunnel is connected
         while ($true) {
+            # Check if Playit is running
             $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
+            
             if ($null -eq $playitProcess) {
                 Write-Host "Playit process is not running. Restarting..."
+                # Restart Playit to re-establish the tunnel
                 Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
             }
+
+            # Ensure that the tunnel itself is active (by pinging or checking connection)
+            $connectionCheck = Test-NetConnection -ComputerName "which-excellent.gl.at.ply.gg" -Port 31106
+            if (-not $connectionCheck.TcpTestSucceeded) {
+                Write-Host "Tunnel connection lost. Reconnecting..."
+                # Reconnect the tunnel by restarting Playit
+                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+            }
+
             Start-Sleep -Seconds 30  # Check every 30 seconds
         }
 
     - name: Keep GitHub Action Runner Alive
       run: |
-          # Prevent GitHub Actions from stopping the runner
-          while ($true) {
+        # Prevent the GitHub Action runner from stopping, keep it alive
+        while ($true) {
             Start-Sleep -Seconds 3600  # Sleep for 1 hour
-          }
+        }
