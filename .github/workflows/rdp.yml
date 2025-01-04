@@ -16,8 +16,8 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5  # Give some time for the download to complete
 
-    # Enable RDP (Remote Desktop Protocol)
-    - name: Enable RDP and Firewall Rules
+    # Default, optional.
+    - name: Enable TS (Remote Desktop)
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
@@ -28,38 +28,12 @@ jobs:
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
-        # Start Playit with the authentication key
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-        # Ensure Playit runs continuously in the background (start second instance for backup)
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+        # تشغيل Playit في الخلفية باستخدام start-Process
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -WindowStyle Hidden -PassThru
+        Start-Sleep -Seconds 5  # Give it time to start the process
 
-    - name: Monitor Playit Tunnel and Reconnect If Necessary
+    # Keep the runner alive for a long time (this will keep the GitHub Action running)
+    - name: Keep the GitHub Action Runner Alive
       run: |
-        # Ensure Playit is always running and the tunnel is connected
-        while ($true) {
-            # Check if Playit is running
-            $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
-            
-            if ($null -eq $playitProcess) {
-                Write-Host "Playit process is not running. Restarting..."
-                # Restart Playit to re-establish the tunnel
-                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-            }
-
-            # Ensure that the tunnel itself is active (by pinging or checking connection)
-            $connectionCheck = Test-NetConnection -ComputerName "which-excellent.gl.at.ply.gg" -Port 31106
-            if (-not $connectionCheck.TcpTestSucceeded) {
-                Write-Host "Tunnel connection lost. Reconnecting..."
-                # Reconnect the tunnel by restarting Playit
-                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-            }
-
-            Start-Sleep -Seconds 30  # Check every 30 seconds
-        }
-
-    - name: Keep GitHub Action Runner Alive
-      run: |
-        # Prevent the GitHub Action runner from stopping, keep it alive
-        while ($true) {
-            Start-Sleep -Seconds 3600  # Sleep for 1 hour
-        }
+        # الطريقة التي تضمن بقاء العملية حية هي استخدام أمر `timeout`
+        timeout /t 9999999
