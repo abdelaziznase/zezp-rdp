@@ -32,10 +32,21 @@ jobs:
         # Ensure Playit runs continuously in the background by restarting Playit after it ends
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow -ArgumentList "--secret $env:PLAYIT_AUTH_KEY"
 
-    # Keep Playit and RDP alive
-    - name: Keep Playit and RDP alive
+    - name: Monitor and Restart Playit if Tunnel Closes
       run: |
-          # Keep Playit alive for an extended period of time
+        # This loop will keep checking if Playit is running and restart it if it stops
+        while ($true) {
+            $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
+            if ($null -eq $playitProcess) {
+                Write-Host "Playit process is not running. Restarting..."
+                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+            }
+            Start-Sleep -Seconds 60  # Check every minute
+        }
+
+    - name: Keep GitHub Action Runner Alive
+      run: |
+          # Prevent the GitHub Action runner from stopping by keeping the process alive
           while ($true) {
             Start-Sleep -Seconds 3600  # Sleep for 1 hour
           }
