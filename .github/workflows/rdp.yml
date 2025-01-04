@@ -41,7 +41,7 @@ jobs:
                 Write-Host "Playit process is not running. Restarting..."
                 Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
             }
-            Start-Sleep -Seconds 30  # Check every 30 seconds
+            Start-Sleep -Seconds 15  # Check every 15 seconds for faster detection
 
     - name: Keep GitHub Action Runner Alive
       run: |
@@ -49,16 +49,4 @@ jobs:
         while ($true) {
             Write-Host "Keeping GitHub Actions runner alive..."
             Start-Sleep -Seconds 3600  # Sleep for 1 hour
-        }
-
-    - name: Ensure Continuous Playit Operation
-      run: |
-        # Ensure Playit restarts immediately if it stops
-        while ($true) {
-            $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
-            if ($null -eq $playitProcess) {
-                Write-Host "Playit process has stopped unexpectedly, restarting it..."
-                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-            }
-            Start-Sleep -Seconds 30  # Check every 30 seconds
         }
