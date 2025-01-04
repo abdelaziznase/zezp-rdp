@@ -35,15 +35,17 @@ jobs:
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
-        # Start Playit in the background (without blocking the script)
+        # Start Playit in the background without waiting for the process to complete
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+
+        # Optionally, start another instance of Playit in case it's required to maintain the tunnel
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
 
     # Prevent workflow from stopping by keeping a process alive
     - name: Keep the GitHub Action Runner Alive
       run: |
-          # Keep the runner alive by running an endless loop with low CPU usage
-          while ($true) { 
-            # Sleep for a reasonable time before checking again
-            Start-Sleep -Seconds 3600
-          }
+        # Sleep in intervals to keep the GitHub runner alive indefinitely while Playit works
+        while ($true) {
+          Write-Host "Keeping Playit RDP Tunnel alive..."
+          Start-Sleep -Seconds 600  # Sleep for 10 minutes and check again
+        }
