@@ -27,26 +27,26 @@ jobs:
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
-        # Start Playit process with the authentication key
+        # Start Playit with the authentication key
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-        # Ensure Playit runs continuously in the background by restarting Playit after it ends
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow -ArgumentList "--secret $env:PLAYIT_AUTH_KEY"
+        # Ensure Playit runs continuously in the background
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
 
-    - name: Monitor and Restart Playit if Tunnel Closes
+    - name: Monitor Playit and Reconnect Tunnel if Closed
       run: |
-        # This loop will keep checking if Playit is running and restart it if it stops
+        # Monitor Playit process and restart if it's closed
         while ($true) {
             $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
             if ($null -eq $playitProcess) {
                 Write-Host "Playit process is not running. Restarting..."
                 Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
             }
-            Start-Sleep -Seconds 60  # Check every minute
+            Start-Sleep -Seconds 30  # Check every 30 seconds
         }
 
     - name: Keep GitHub Action Runner Alive
       run: |
-          # Prevent the GitHub Action runner from stopping by keeping the process alive
+          # Prevent GitHub Actions from stopping the runner
           while ($true) {
             Start-Sleep -Seconds 3600  # Sleep for 1 hour
           }
