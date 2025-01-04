@@ -30,12 +30,23 @@ jobs:
 
     - name: Enable TS (RDP)
       run: |
+        # تمكين الاتصال عن بعد عبر RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        
+        # التأكد من أن خدمة Remote Desktop تعمل
+        Start-Service -Name TermService
+
+        # إضافة حساب runneradmin إلى مجموعة Remote Desktop Users
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
+
+        # فتح المنفذ 3389 في الجدار الناري
+        New-NetFirewallRule -DisplayName "Allow RDP" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 3389
 
     - name: Set password for runneradmin
       run: |
+        # تعيين كلمة مرور لحساب runneradmin
         Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
     - name: Start Playit and Set Up RDP Tunnel
@@ -43,15 +54,12 @@ jobs:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
         # تشغيل Playit باستخدام المفتاح السري
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-
-        # تأكد من تشغيل Playit في الخلفية
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -PassThru | Out-Null
+        Start-Sleep -Seconds 5  # إعطاء بعض الوقت للتأكد من أن Playit بدأ بشكل صحيح
+        Write-Host "Playit has started successfully. Checking logs..."
 
     - name: Keep the GitHub Action Runner Alive Indefinitely
       run: |
         # تأكد من أن عملية GitHub Actions ستظل تعمل إلى أجل غير مسمى
         Write-Host "Waiting indefinitely to keep the runner alive..."
-        while ($true) {
-          Start-Sleep -Seconds 60  # تقوم هذه الحلقة بإبقاء الوظيفة حية
-        }
+        Wait-Process -Name "playit"
