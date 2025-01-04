@@ -13,49 +13,25 @@ jobs:
 
     - name: Download and Install Playit
       run: |
-        Write-Host "Downloading Playit..."
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5  # Give some time for the download to complete
-        Write-Host "Playit downloaded successfully."
 
     # Default, optional.
     - name: Enable TS
-      run: |
-        Write-Host "Enabling Remote Desktop..."
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-        Write-Host "Remote Desktop enabled."
+      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
-    - run: |
-        Write-Host "Setting Local User Password..."
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-        Write-Host "Password set for runneradmin."
-
-    - name: Start Playit and Set Up RDP Tunnel
+    - name: Start Playit and Set Up RDP Tunnel in the Background
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
-        Write-Host "Starting Playit with auth key..."
-        try {
-          Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -WindowStyle Hidden
-          Write-Host "Playit started successfully."
-        } catch {
-          Write-Host "Error starting Playit: $_"
-          exit 1
-        }
+        # Start Playit in the background without opening a new window
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -WindowStyle Hidden
 
-        # Ensure Playit continues to run in the background
-        Write-Host "Running Playit in background..."
-        try {
-          Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow -WindowStyle Hidden
-          Write-Host "Playit is running in the background."
-        } catch {
-          Write-Host "Error running Playit in background: $_"
-          exit 1
-        }
-
+    # Prevent workflow to stop and keep it alive while the background process runs
     - name: Keep the GitHub Action Runner Alive
       run: |
-          Write-Host "Keeping the runner alive..."
-          Start-Sleep -Seconds 11800  # Adjust the duration based on your needs
+        # Keeping the process alive for a long time (you can adjust the time based on your needs)
+        Start-Sleep -Seconds 11800  # Adjust the duration based on your needs
