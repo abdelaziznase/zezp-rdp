@@ -21,21 +21,32 @@ jobs:
       run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
     - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
     - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-    - run: Set-LocalUser -Name "zezo" -Password (ConvertTo-SecureString -AsPlainText "zezo" -Force)
+    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
     - name: Start Playit and Set Up RDP Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
-        # Start Playit process with the authentication key
+        # Start Playit with the authentication key
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-        # Ensure Playit runs continuously in the background by restarting Playit after it ends
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow -ArgumentList "--secret $env:PLAYIT_AUTH_KEY"
+        # Ensure Playit runs continuously in the background
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
 
-    # Keep Playit and RDP alive
-    - name: Keep Playit and RDP alive
+    - name: Monitor Playit and Reconnect Tunnel if Closed
       run: |
-          # Keep Playit alive for an extended period of time
+        # Monitor Playit process and restart if it's closed
+        while ($true) {
+            $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
+            if ($null -eq $playitProcess) {
+                Write-Host "Playit process is not running. Restarting..."
+                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+            }
+            Start-Sleep -Seconds 30  # Check every 30 seconds
+        }
+
+    - name: Keep GitHub Action Runner Alive
+      run: |
+          # Prevent GitHub Actions from stopping the runner
           while ($true) {
             Start-Sleep -Seconds 3600  # Sleep for 1 hour
           }
