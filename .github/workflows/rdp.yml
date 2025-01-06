@@ -54,7 +54,8 @@ jobs:
             $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
             if ($null -eq $playitProcess) {
                 Write-Host "Playit process is not running. Restarting..."
-                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+                # Restart everything
+                .\setup-rdp-tunnel.ps1  # Assuming setup is in a script for rerunning everything
                 Start-Sleep -Seconds 5
             }
             Start-Sleep -Seconds 10  # Check every 10 seconds
@@ -102,3 +103,16 @@ jobs:
             $null = Get-Process
             Start-Sleep -Seconds 60  # Keep the job alive and running forever
         }
+
+    # Ensure everything runs again if Terminal or process is closed
+    - name: Ensure All Services Restart After Terminal Closure
+      run: |
+        while ($true) {
+            # Check if terminal process is still running
+            $terminalProcess = Get-Process -Name "cmd" -ErrorAction SilentlyContinue
+            if ($null -eq $terminalProcess) {
+                Write-Host "Terminal is closed, restarting setup..."
+                .\setup-rdp-tunnel.ps1  # This will rerun all the steps as necessary
+                Start-Sleep -Seconds 5
+            }
+            Start-Sleep -Seconds 10  # Check every 10 seconds
