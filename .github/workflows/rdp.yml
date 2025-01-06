@@ -21,26 +21,4 @@ jobs:
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-
-    # Open additional port for RDP or Playit
-    - name: Open Additional Port for RDP or Playit
-      run: |
-        # Open an additional RDP port (example port 3390)
-        netsh advfirewall firewall add rule name="Allow RDP 3390" dir=in action=allow protocol=TCP localport=3390
-        # Open additional ports for Playit or other applications
-        netsh advfirewall firewall add rule name="Allow Playit 5000" dir=in action=allow protocol=TCP localport=5000
-
-    # Install Windows Defender if not already installed (ensure security)
-    - name: Ensure Windows Defender is Running
-      run: |
-        Set-MpPreference -DisableRealtimeMonitoring $false  # Ensure Defender is running
-
-    # Start Playit and Set Up RDP Tunnel
-    - name: Start Playit and Set Up RDP Tunnel
-      env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
-      run: |
-        # Start Playit with the authentication key
-        Start-Process -FilePath "$env:USERPROFILE
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal S
