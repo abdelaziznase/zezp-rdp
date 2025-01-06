@@ -5,102 +5,85 @@ on:
 
 jobs:
   setup-rdp-tunnel:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
     - name: Check out the repository
       uses: actions/checkout@v2
 
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl ufw xrdp
+
     - name: Download and Install Playit
       run: |
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5  # Give some time for the download to complete
+        curl -L "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-x86_64-signed.tar.gz" -o playit.tar.gz
+        tar -xvzf playit.tar.gz
+        sudo mv playit /usr/local/bin/
+        rm playit.tar.gz
 
-    # Enable RDP (Remote Desktop Protocol)
-    - name: Enable TS (RDP)
+    - name: Enable RDP (Remote Desktop Protocol) and Configure xrdp
       run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        # Set a secure password via GitHub Secrets
-        $password = ConvertTo-SecureString -AsPlainText "${{ secrets.RUNNER_PASSWORD }}" -Force
-        Set-LocalUser -Name "runneradmin" -Password $password
+        # Enable and start xrdp service
+        sudo systemctl enable xrdp
+        sudo systemctl start xrdp
+        sudo ufw allow 3389  # Open RDP port (3389)
+        sudo ufw reload
 
-    # Open specific port for RDP or Playit only from allowed IPs (example: 192.168.x.x)
-    - name: Open Specific Port for RDP or Playit
+    - name: Open Additional Port for Playit
       run: |
-        # Open RDP port (example port 3390) only for trusted IPs
-        netsh advfirewall firewall add rule name="Allow RDP 3390" dir=in action=allow protocol=TCP localport=3390 remoteip="192.168.1.0/24"
-        # Open additional ports for Playit only for trusted IPs
-        netsh advfirewall firewall add rule name="Allow Playit 5000" dir=in action=allow protocol=TCP localport=5000 remoteip="192.168.1.0/24"
+        # Open port 5000 for Playit
+        sudo ufw allow 5000
+        sudo ufw reload
 
-    # Install Windows Defender if not already installed (ensure security)
-    - name: Ensure Windows Defender is Running
-      run: |
-        Set-MpPreference -DisableRealtimeMonitoring $false  # Ensure Defender is running
-
-    # Start Playit and Set Up RDP Tunnel
     - name: Start Playit and Set Up RDP Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
         # Start Playit with the authentication key
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
+        playit --secret $PLAYIT_AUTH_KEY &
         # Ensure Playit runs continuously in the background
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+        nohup playit --secret $PLAYIT_AUTH_KEY &
 
-    # Monitor Playit process and ensure it remains running
-    - name: Monitor Playit and Restart if Closed
+    - name: Monitor Playit Process and Restart if Closed
       run: |
-        while ($true) {
-            $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
-            if ($null -eq $playitProcess) {
-                Write-Host "Playit process is not running. Restarting..."
-                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-                Start-Sleep -Seconds 5
-            }
-            Start-Sleep -Seconds 10  # Check every 10 seconds
+        while true; do
+          if ! pgrep -x "playit" > /dev/null; then
+            echo "Playit process not running. Restarting..."
+            nohup playit --secret $PLAYIT_AUTH_KEY &
+          fi
+          sleep 10
+        done
 
-    # Run Playit as a Service (Secure Method)
     - name: Run Playit as a Service (Secure Method)
       run: |
-        # Set Playit as a service to auto-restart if it crashes
-        New-Service -Name "PlayitService" -Binary "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -StartupType Automatic
-        Start-Service "PlayitService"
+        # Create a systemd service for Playit to ensure it restarts if it crashes
+        echo "[Unit]
+        Description=Playit Service
+        After=network.target
 
-    # Additional Security Measures: Block unauthorized IPs
-    - name: Block Unauthorized IPs for RDP and Playit
+        [Service]
+        ExecStart=/usr/local/bin/playit --secret $PLAYIT_AUTH_KEY
+        Restart=always
+
+        [Install]
+        WantedBy=multi-user.target" | sudo tee /etc/systemd/system/playit.service
+        sudo systemctl daemon-reload
+        sudo systemctl enable playit
+        sudo systemctl start playit
+
+    - name: Block Unauthorized IPs
       run: |
-        # Add rule to block unauthorized IP addresses (adjust as needed)
-        netsh advfirewall firewall add rule name="Block Unauthorized IPs" dir=in action=block protocol=TCP remoteip=0.0.0.0/0 localport=3389,3390
-        netsh advfirewall firewall add rule name="Block Unauthorized Playit IPs" dir=in action=block protocol=TCP remoteip=0.0.0.0/0 localport=5000
+        # Block unauthorized IPs using UFW
+        sudo ufw deny from any to any port 3389
+        sudo ufw deny from any to any port 5000
+        sudo ufw reload
 
-    # Keep GitHub Action Runner Alive in Multiple Tabs
-    - name: Keep GitHub Action Runner Alive in Multiple Tabs
+    - name: Keep GitHub Action Runner Alive
       run: |
         # Run a no-op task to keep the runner alive
-        Start-Job -ScriptBlock {
-            while ($true) {
-                Write-Host "Keeping GitHub Actions runner alive..."
-                $null = Get-Process 
-                Start-Sleep -Seconds 300  # Sleep for 5 minutes
-            }
-        }
-
-        # Run a background job for Playit process monitoring
-        Start-Job -ScriptBlock {
-            while ($true) {
-                Write-Host "Monitoring Playit process..."
-                $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
-                if ($null -eq $playitProcess) {
-                    Write-Host "Playit process is not running. Restarting..."
-                    Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-                }
-                Start-Sleep -Seconds 15  # Check every 15 seconds
-            }
-        }
-
-        # Wait for background jobs to ensure continuous operation
-        while ($true) {
-            Start-Sleep -Seconds 60  # Keep the main job running indefinitely
-        }
+        while true; do
+          echo "Keeping GitHub Actions runner alive..."
+          sleep 300
+        done
