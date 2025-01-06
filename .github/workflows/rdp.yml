@@ -55,7 +55,7 @@ jobs:
             if ($null -eq $playitProcess) {
                 Write-Host "Playit process is not running. Restarting..."
                 # Restart everything
-                .\setup-rdp-tunnel.ps1  # Assuming setup is in a script for rerunning everything
+                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
                 Start-Sleep -Seconds 5
             }
             Start-Sleep -Seconds 10  # Check every 10 seconds
