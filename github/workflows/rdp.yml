@@ -14,7 +14,7 @@ jobs:
     - name: Download and Install Playit
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5  # Give some time for the download to complete
+        Start-Sleep -Seconds 50  # Give some time for the download to complete
 
     # Enable RDP (Remote Desktop Protocol)
     - name: Enable TS
@@ -41,12 +41,12 @@ jobs:
                 Write-Host "Playit process is not running. Restarting..."
                 Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
             }
-            Start-Sleep -Seconds 30  # Check every 30 seconds
-        }
+            Start-Sleep -Seconds 50  # Check every 15 seconds for faster detection
 
     - name: Keep GitHub Action Runner Alive
       run: |
-          # Prevent GitHub Actions from stopping the runner
-          while ($true) {
-            Start-Sleep -Seconds 3600  # Sleep for 1 hour
-          }
+        # Prevent GitHub Actions from stopping the runner
+        while ($true) {
+            Write-Host "Keeping GitHub Actions runner alive..."
+            Start-Sleep -Seconds 50  
+        }
