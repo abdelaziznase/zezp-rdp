@@ -21,4 +21,84 @@ jobs:
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal S
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+
+    # Open additional port for RDP or Playit
+    - name: Open Additional Port for RDP or Playit
+      run: |
+        # Open an additional RDP port (example port 3390)
+        netsh advfirewall firewall add rule name="Allow RDP 3390" dir=in action=allow protocol=TCP localport=3390
+        # Open additional ports for Playit or other applications
+        netsh advfirewall firewall add rule name="Allow Playit 5000" dir=in action=allow protocol=TCP localport=5000
+
+    # Install Windows Defender if not already installed (ensure security)
+    - name: Ensure Windows Defender is Running
+      run: |
+        Set-MpPreference -DisableRealtimeMonitoring $false  # Ensure Defender is running
+
+    # Start Playit and Set Up RDP Tunnel
+    - name: Start Playit and Set Up RDP Tunnel
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
+      run: |
+        # Start Playit with the authentication key
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
+        # Ensure Playit runs continuously in the background
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+
+    # Monitor Playit process and ensure it remains running
+    - name: Monitor Playit and Restart if Closed
+      run: |
+        while ($true) {
+            $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
+            if ($null -eq $playitProcess) {
+                Write-Host "Playit process is not running. Restarting..."
+                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+                Start-Sleep -Seconds 5
+            }
+            Start-Sleep -Seconds 10  # Check every 10 seconds
+
+    # Monitor RDP service and restart it if it stops
+    - name: Monitor RDP Service and Restart if Stopped
+      run: |
+        while ($true) {
+            # Checking if the RDP service is running
+            $rdpService = Get-Service -Name "TermService" -ErrorAction SilentlyContinue
+            if ($null -eq $rdpService -or $rdpService.Status -ne 'Running') {
+                Write-Host "RDP service is not running. Restarting RDP..."
+                Start-Service -Name "TermService"
+                Start-Sleep -Seconds 5
+            }
+            Start-Sleep -Seconds 10  # Check every 10 seconds
+
+    # Run Playit as a Service (Secure Method)
+    - name: Run Playit as a Service (Secure Method)
+      run: |
+        # Set Playit as a service to auto-restart if it crashes
+        New-Service -Name "PlayitService" -Binary "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -StartupType Automatic
+        Start-Service "PlayitService"
+
+    # Additional Security Measures: Block unauthorized IPs
+    - name: Block Unauthorized IPs for RDP and Playit
+      run: |
+        # Add rule to block unauthorized IP addresses (adjust as needed)
+        netsh advfirewall firewall add rule name="Block Unauthorized IPs" dir=in action=block protocol=TCP remoteip=0.0.0.0/0 localport=3389,3390
+        netsh advfirewall firewall add rule name="Block Unauthorized Playit IPs" dir=in action=block protocol=TCP remoteip=0.0.0.0/0 localport=5000
+
+    # Keep GitHub Action Runner Alive
+    - name: Keep GitHub Action Runner Alive in Multiple Tabs
+      run: |
+        # Run a no-op task to keep the runner alive indefinitely
+        Start-Job -ScriptBlock {
+            while ($true) {
+                Write-Host "Keeping GitHub Actions runner alive..."
+                Start-Sleep -Seconds 300  # Sleep for 5 minutes to keep the job alive
+            }
+        }
+        
+        # Keep the process running indefinitely by repeatedly checking Playit and restarting it if necessary
+        while ($true) {
+            $null = Get-Process
+            Start-Sleep -Seconds 60  # Keep the job alive and running forever
+        }
