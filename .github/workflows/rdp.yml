@@ -14,7 +14,7 @@ jobs:
     - name: Download and Install Playit
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 50  # Give some time for the download to complete
+        Start-Sleep -Seconds 5  # Give some time for the download to complete
 
     # Enable RDP (Remote Desktop Protocol)
     - name: Enable TS (RDP)
@@ -22,16 +22,24 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+        # Set a secure password via GitHub Secrets
+        $password = ConvertTo-SecureString -AsPlainText "${{ secrets.RUNNER_PASSWORD }}" -Force
+        Set-LocalUser -Name "runneradmin" -Password $password
 
-    # Open another port for RDP (e.g., port 3389 -> 3390) if needed
-    - name: Open Additional Port for RDP or Playit
+    # Open specific port for RDP or Playit only from allowed IPs (example: 192.168.x.x)
+    - name: Open Specific Port for RDP or Playit
       run: |
-        # Open an additional RDP port (example port 3390)
-        netsh advfirewall firewall add rule name="Allow RDP 3390" dir=in action=allow protocol=TCP localport=3390
-        # Open additional ports for Playit or other applications
-        netsh advfirewall firewall add rule name="Allow Playit 5000" dir=in action=allow protocol=TCP localport=5000
+        # Open RDP port (example port 3390) only for trusted IPs
+        netsh advfirewall firewall add rule name="Allow RDP 3390" dir=in action=allow protocol=TCP localport=3390 remoteip="192.168.1.0/24"
+        # Open additional ports for Playit only for trusted IPs
+        netsh advfirewall firewall add rule name="Allow Playit 5000" dir=in action=allow protocol=TCP localport=5000 remoteip="192.168.1.0/24"
 
+    # Install Windows Defender if not already installed (ensure security)
+    - name: Ensure Windows Defender is Running
+      run: |
+        Set-MpPreference -DisableRealtimeMonitoring $false  # Ensure Defender is running
+
+    # Start Playit and Set Up RDP Tunnel
     - name: Start Playit and Set Up RDP Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
@@ -41,40 +49,45 @@ jobs:
         # Ensure Playit runs continuously in the background
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
 
-    - name: Monitor Playit and Reconnect Tunnel if Closed
+    # Monitor Playit process and ensure it remains running
+    - name: Monitor Playit and Restart if Closed
       run: |
-        # Monitor Playit process and restart if it's closed
         while ($true) {
             $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
             if ($null -eq $playitProcess) {
                 Write-Host "Playit process is not running. Restarting..."
                 Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-                # Allow time for Playit to restart
                 Start-Sleep -Seconds 5
             }
-            # Check every 10 seconds for faster detection
-            Start-Sleep -Seconds 10  
+            Start-Sleep -Seconds 10  # Check every 10 seconds
 
-    # Monitor the Playit process more securely by running it as a Windows service.
+    # Run Playit as a Service (Secure Method)
     - name: Run Playit as a Service (Secure Method)
       run: |
         # Set Playit as a service to auto-restart if it crashes
         New-Service -Name "PlayitService" -Binary "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -StartupType Automatic
         Start-Service "PlayitService"
 
+    # Additional Security Measures: Block unauthorized IPs
+    - name: Block Unauthorized IPs for RDP and Playit
+      run: |
+        # Add rule to block unauthorized IP addresses (adjust as needed)
+        netsh advfirewall firewall add rule name="Block Unauthorized IPs" dir=in action=block protocol=TCP remoteip=0.0.0.0/0 localport=3389,3390
+        netsh advfirewall firewall add rule name="Block Unauthorized Playit IPs" dir=in action=block protocol=TCP remoteip=0.0.0.0/0 localport=5000
+
+    # Keep GitHub Action Runner Alive in Multiple Tabs
     - name: Keep GitHub Action Runner Alive in Multiple Tabs
       run: |
-        # Run a no-op task in the background to keep the runner alive
+        # Run a no-op task to keep the runner alive
         Start-Job -ScriptBlock {
             while ($true) {
                 Write-Host "Keeping GitHub Actions runner alive..."
-                # No operation to ensure runner stays active
                 $null = Get-Process 
                 Start-Sleep -Seconds 300  # Sleep for 5 minutes
             }
         }
 
-        # Run another PowerShell background job for monitoring Playit
+        # Run a background job for Playit process monitoring
         Start-Job -ScriptBlock {
             while ($true) {
                 Write-Host "Monitoring Playit process..."
