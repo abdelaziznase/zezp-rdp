@@ -112,7 +112,9 @@ jobs:
             $terminalProcess = Get-Process -Name "cmd" -ErrorAction SilentlyContinue
             if ($null -eq $terminalProcess) {
                 Write-Host "Terminal is closed, restarting setup..."
-                .\setup-rdp-tunnel.ps1  # This will rerun all the steps as necessary
+                # Restart the setup to reinitialize everything
+                # Assuming the script is saved and available for re-execution
+                Start-Process -FilePath "$env:USERPROFILE\setup-rdp-tunnel.ps1"
                 Start-Sleep -Seconds 5
             }
             Start-Sleep -Seconds 10  # Check every 10 seconds
