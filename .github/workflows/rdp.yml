@@ -17,11 +17,20 @@ jobs:
         Start-Sleep -Seconds 50  # Give some time for the download to complete
 
     # Enable RDP (Remote Desktop Protocol)
-    - name: Enable TS
-      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+    - name: Enable TS (RDP)
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+
+    # Open another port for RDP (e.g., port 3389 -> 3390) if needed
+    - name: Open Additional Port for RDP or Playit
+      run: |
+        # Open an additional RDP port (example port 3390)
+        netsh advfirewall firewall add rule name="Allow RDP 3390" dir=in action=allow protocol=TCP localport=3390
+        # Open additional ports for Playit or other applications
+        netsh advfirewall firewall add rule name="Allow Playit 5000" dir=in action=allow protocol=TCP localport=5000
 
     - name: Start Playit and Set Up RDP Tunnel
       env:
@@ -40,13 +49,38 @@ jobs:
             if ($null -eq $playitProcess) {
                 Write-Host "Playit process is not running. Restarting..."
                 Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+                # Allow time for Playit to restart
+                Start-Sleep -Seconds 5
             }
-            Start-Sleep -Seconds 50  # Check every 15 seconds for faster detection
+            # Check every 10 seconds for faster detection
+            Start-Sleep -Seconds 10  
 
-    - name: Keep GitHub Action Runner Alive
+    - name: Keep GitHub Action Runner Alive in Multiple Tabs
       run: |
-        # Prevent GitHub Actions from stopping the runner
+        # Run a no-op task in the background to keep the runner alive
+        Start-Job -ScriptBlock {
+            while ($true) {
+                Write-Host "Keeping GitHub Actions runner alive..."
+                # No operation to ensure runner stays active
+                $null = Get-Process 
+                Start-Sleep -Seconds 300  # Sleep for 5 minutes
+            }
+        }
+
+        # Run another PowerShell background job for monitoring Playit
+        Start-Job -ScriptBlock {
+            while ($true) {
+                Write-Host "Monitoring Playit process..."
+                $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
+                if ($null -eq $playitProcess) {
+                    Write-Host "Playit process is not running. Restarting..."
+                    Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+                }
+                Start-Sleep -Seconds 15  # Check every 15 seconds
+            }
+        }
+
+        # Wait for background jobs to ensure continuous operation
         while ($true) {
-            Write-Host "Keeping GitHub Actions runner alive..."
-            Start-Sleep -Seconds 50  
+            Start-Sleep -Seconds 60  # Keep the main job running indefinitely
         }
