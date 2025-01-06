@@ -55,6 +55,13 @@ jobs:
             # Check every 10 seconds for faster detection
             Start-Sleep -Seconds 10  
 
+    # Monitor the Playit process more securely by running it as a Windows service.
+    - name: Run Playit as a Service (Secure Method)
+      run: |
+        # Set Playit as a service to auto-restart if it crashes
+        New-Service -Name "PlayitService" -Binary "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -StartupType Automatic
+        Start-Service "PlayitService"
+
     - name: Keep GitHub Action Runner Alive in Multiple Tabs
       run: |
         # Run a no-op task in the background to keep the runner alive
