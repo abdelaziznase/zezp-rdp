@@ -16,6 +16,7 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5  # Give some time for the download to complete
 
+    # Enable RDP (Remote Desktop Protocol)
     - name: Enable TS (RDP)
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -23,53 +24,23 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
+    # Open additional port for RDP or Playit
     - name: Open Additional Port for RDP or Playit
       run: |
+        # Open an additional RDP port (example port 3390)
         netsh advfirewall firewall add rule name="Allow RDP 3390" dir=in action=allow protocol=TCP localport=3390
+        # Open additional ports for Playit or other applications
         netsh advfirewall firewall add rule name="Allow Playit 5000" dir=in action=allow protocol=TCP localport=5000
 
+    # Install Windows Defender if not already installed (ensure security)
     - name: Ensure Windows Defender is Running
       run: |
         Set-MpPreference -DisableRealtimeMonitoring $false  # Ensure Defender is running
 
+    # Start Playit and Set Up RDP Tunnel
     - name: Start Playit and Set Up RDP Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-
-    - name: Monitor Playit (Less Frequent)
-      run: |
-        while ($true) {
-            $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
-            if ($null -eq $playitProcess) {
-                Write-Host "Playit process is not running. Restarting..."
-                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-                Start-Sleep -Seconds 30  # Longer sleep to reduce CPU load
-            }
-            Start-Sleep -Seconds 30  # Check every 30 seconds
-        }
-
-    - name: Run Playit as a Service (Secure Method)
-      run: |
-        New-Service -Name "PlayitService" -Binary "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -StartupType Automatic
-        Start-Service "PlayitService"
-
-    - name: Block Unauthorized IPs for RDP and Playit
-      run: |
-        netsh advfirewall firewall add rule name="Block Unauthorized IPs" dir=in action=block protocol=TCP remoteip=0.0.0.0/0 localport=3389,3390
-        netsh advfirewall firewall add rule name="Block Unauthorized Playit IPs" dir=in action=block protocol=TCP remoteip=0.0.0.0/0 localport=5000
-
-    - name: Keep GitHub Action Runner Alive in Multiple Tabs
-      run: |
-        Start-Job -ScriptBlock {
-            while ($true) {
-                Write-Host "Keeping GitHub Actions runner alive..."
-                Start-Sleep -Seconds 300  # Sleep for 5 minutes to keep the job alive
-            }
-        }
-        while ($true) {
-            $null = Get-Process
-            Start-Sleep -Seconds 120  # Keep the job alive and running forever, check less frequently
-        }
+        # Start Playit with the authentication key
+        Start-Process -FilePath "$env:USERPROFILE
